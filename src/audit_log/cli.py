@@ -3,6 +3,11 @@ import os
 import sys
 from pathlib import Path
 
+try:
+    import readline  # noqa: F401
+except ImportError:
+    pass
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from audit_log.db import DEFAULT_DB_PATH, init_db
