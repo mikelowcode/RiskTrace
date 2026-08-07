@@ -1,0 +1,15 @@
+.env
+__pycache__/
+*.py[cod]
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+.DS_Store
+
+# local audit artifacts, contain live demo data
+*.sqlite3
+*.db
+audit-log.md
