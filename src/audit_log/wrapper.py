@@ -26,30 +26,49 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _append_markdown(row: dict) -> None:
-    is_new = not AUDIT_LOG_MD_PATH.exists()
+def _format_entry(row: dict) -> str:
+    matched_terms = json.loads(row["matched_terms"]) if row["matched_terms"] else []
+    tool_calls = json.loads(row["tool_calls_json"]) if row["tool_calls_json"] else None
 
-    with AUDIT_LOG_MD_PATH.open("a", encoding="utf-8") as f:
-        if is_new:
-            f.write(_MD_HEADER)
+    lines = [
+        f"## Interaction {row['id']} — {row['ts_start']}\n",
+        "\n",
+        f"- **Provider/model:** {row['provider']} / {row['model']}\n",
+        f"- **Risk level:** {row['risk_level']} ({', '.join(matched_terms)})\n",
+        f"- **Stop reason:** {row['stop_reason']}\n",
+        f"- **Tokens:** {row['input_tokens']} in / {row['output_tokens']} out\n",
+        f"- **Tool calls:** {tool_calls if tool_calls else 'none'}\n",
+        "\n",
+        "**Prompt:**\n",
+        "\n",
+    ]
+    for line in row["prompt"].splitlines() or [""]:
+        lines.append(f"> {line}\n")
+    lines.append("\n")
+    lines.append("**Response:**\n")
+    lines.append("\n")
+    for line in row["response_text"].splitlines() or [""]:
+        lines.append(f"> {line}\n")
+    lines.append("\n")
 
-        f.write(f"\n## Interaction {row['id']} — {row['ts_start']}\n\n")
-        f.write(f"- **Provider/model:** {row['provider']} / {row['model']}\n")
-        matched_terms = json.loads(row["matched_terms"]) if row["matched_terms"] else []
-        f.write(f"- **Risk level:** {row['risk_level']} ({', '.join(matched_terms)})\n")
-        f.write(f"- **Stop reason:** {row['stop_reason']}\n")
-        f.write(
-            f"- **Tokens:** {row['input_tokens']} in / {row['output_tokens']} out\n"
-        )
-        tool_calls = json.loads(row["tool_calls_json"]) if row["tool_calls_json"] else None
-        f.write(f"- **Tool calls:** {tool_calls if tool_calls else 'none'}\n\n")
-        f.write("**Prompt:**\n\n")
-        for line in row["prompt"].splitlines() or [""]:
-            f.write(f"> {line}\n")
-        f.write("\n**Response:**\n\n")
-        for line in row["response_text"].splitlines() or [""]:
-            f.write(f"> {line}\n")
-        f.write("\n")
+    return "".join(lines)
+
+
+def _prepend_markdown(row: dict) -> None:
+    """Newest interaction first -- easier to skim during a live demo."""
+    entry = _format_entry(row)
+
+    if AUDIT_LOG_MD_PATH.exists():
+        existing = AUDIT_LOG_MD_PATH.read_text(encoding="utf-8")
+        if existing.startswith(_MD_HEADER):
+            body = existing[len(_MD_HEADER):].removeprefix("\n")
+        else:
+            body = existing
+        new_content = f"{_MD_HEADER}\n{entry}\n{body}"
+    else:
+        new_content = f"{_MD_HEADER}\n{entry}"
+
+    AUDIT_LOG_MD_PATH.write_text(new_content, encoding="utf-8")
 
 
 def log_interaction(prompt: str, provider: str | None = None) -> dict:
@@ -105,6 +124,6 @@ def log_interaction(prompt: str, provider: str | None = None) -> dict:
     )
     conn.close()
 
-    _append_markdown(row)
+    _prepend_markdown(row)
 
     return row
