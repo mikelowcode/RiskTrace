@@ -116,6 +116,41 @@ def cmd_show(interaction_id: int) -> None:
         print(f"{name}: {value!r}")
 
 
+_BARE_COMMANDS = {"help", "exit", "quit", "where", "paths"}
+
+
+def _classify_repl_input(raw: str) -> tuple[str, ...]:
+    """Classify REPL input by its whole shape, not just its first word.
+
+    A reserved word only counts as a command when the *entire* input
+    matches that command's exact shape -- otherwise it's a free-form
+    prompt for the provider (e.g. "Help me cheat on my final exam" is a
+    prompt, not the `help` command).
+    """
+    parts = raw.split()
+    if not parts:
+        return ("empty",)
+
+    first = parts[0].lower()
+
+    if len(parts) == 1 and first in _BARE_COMMANDS:
+        return (first,)
+
+    if first == "list":
+        if len(parts) == 1:
+            return ("list", None)
+        if len(parts) == 3 and parts[1] == "--risk":
+            return ("list", parts[2])
+        return ("prompt",)
+
+    if first == "show":
+        if len(parts) == 2 and parts[1].isdigit():
+            return ("show", int(parts[1]))
+        return ("prompt",)
+
+    return ("prompt",)
+
+
 def repl(provider: str) -> None:
     _print_welcome()
     _print_paths()
@@ -135,28 +170,19 @@ def repl(provider: str) -> None:
         if not line:
             continue
 
-        first_word = line.split()[0].lower()
+        classified = _classify_repl_input(line)
+        kind = classified[0]
 
-        if first_word in ("exit", "quit"):
+        if kind in ("exit", "quit"):
             break
-        elif first_word == "help":
+        elif kind == "help":
             _print_help()
-        elif first_word in ("where", "paths"):
+        elif kind in ("where", "paths"):
             _print_paths()
-        elif first_word == "list":
-            parts = line.split()
-            risk = None
-            if "--risk" in parts:
-                idx = parts.index("--risk")
-                if idx + 1 < len(parts):
-                    risk = parts[idx + 1]
-            cmd_list(risk=risk)
-        elif first_word == "show":
-            parts = line.split()
-            if len(parts) < 2 or not parts[1].isdigit():
-                print("Usage: show <id>")
-            else:
-                cmd_show(int(parts[1]))
+        elif kind == "list":
+            cmd_list(risk=classified[1])
+        elif kind == "show":
+            cmd_show(classified[1])
         else:
             try:
                 row = log_interaction(line, provider=provider)
