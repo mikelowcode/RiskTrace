@@ -63,6 +63,20 @@ RULES: list[Rule] = [
     # deception — medium
     Rule(r"\bpretend (?:to be|you are|you're)\b", "deception", "medium", "pretend to be / pretend you are"),
     Rule("impersonate", "deception", "medium", "impersonate"),
+
+    # unauthorized_access — high; proximity patterns catch "hack into X"
+    # phrasing without flagging unrelated uses of "hack" ("life hack",
+    # "hackathon") — hack alone isn't enough, it must be paired with a
+    # target (into/account/email/password/etc.).
+    Rule(r"\bhack(?:ing)?\b.{0,25}\b(?:into|account|email|password|wifi|phone|computer|server|system|network)\b",
+         "unauthorized_access", "high", "hack ... into an account/system"),
+    Rule(r"\bbrute[\s-]?force\b.{0,20}\bpassword\b", "unauthorized_access", "high", "brute-force a password"),
+    Rule(r"\bcrack\b.{0,20}\bpassword\b", "unauthorized_access", "high", "crack a password"),
+    Rule(r"\bkeylogger\b", "unauthorized_access", "high", "keylogger"),
+    Rule(r"\bphishing\b", "unauthorized_access", "medium", "phishing"),
+    Rule(r"\bunauthorized access\b", "unauthorized_access", "high", "unauthorized access"),
+    Rule(r"\bbypass\b.{0,20}\b(?:password|login|2fa|security|authentication)\b",
+         "unauthorized_access", "high", "bypass password/login/2FA/security"),
 ]
 
 TIER_ORDER = {"low": 0, "medium": 1, "high": 2}
