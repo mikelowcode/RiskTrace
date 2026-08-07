@@ -1,6 +1,6 @@
-# AI Decision Audit Log
+# RiskTrace
 
-A local-first audit log middleware for LLM API calls. Every prompt and
+**AI Decision Audit Log** — a local-first audit log middleware for LLM API calls. Every prompt and
 response that passes through it is run against a deterministic,
 non-LLM, regex-based risk classifier, then written to a local SQLite
 database and a human-readable markdown mirror.
@@ -8,7 +8,7 @@ database and a human-readable markdown mirror.
 Built for the Claude Impact Lab build session "Who decides the rules?"
 (AI governance and transparency). The core story is a governance
 mechanism that's fully inspectable — a human can read the classifier's
-rule table (`src/audit_log/risk_classifier.py`) top to bottom and know
+rule table (`src/risktrace/risk_classifier.py`) top to bottom and know
 exactly why any interaction was flagged the way it was. No black box.
 
 ## "Local-first" describes the audit record, not the model
@@ -31,7 +31,7 @@ prompt
   → provider call (Anthropic / OpenAI / Ollama — deterministic extraction only)
   → risk_classifier.classify(prompt, response)   ← regex rule table, no LLM involved
   → SQLite row (interactions table)
-  → markdown block appended to audit-log.md
+  → markdown block prepended to audit-log.md (newest turn on top)
 ```
 
 No LLM or external moderation API is ever used to produce the audit
@@ -51,7 +51,7 @@ All phases (0–7) are implemented:
 
 ## Demo escalation prompts
 
-`src/audit_log/demo_prompts.py` is the single source of truth for the
+`src/risktrace/demo_prompts.py` is the single source of truth for the
 three demo prompts — the CLI, this README, and the tests all point at
 it so the wording can't drift from what the classifier actually fires
 on.
@@ -65,7 +65,7 @@ on.
 ## Usage
 
 ```sh
-uv run src/audit_log/cli.py [--provider anthropic|openai|ollama]
+uv run src/risktrace/cli.py [--provider anthropic|openai|ollama]
 ```
 
 If `--provider` isn't passed and `AUDIT_LOG_PROVIDER` isn't set in
@@ -84,8 +84,8 @@ Inside the REPL:
 These also work as one-shot subcommands from the shell:
 
 ```sh
-uv run src/audit_log/cli.py list --risk high
-uv run src/audit_log/cli.py show 3
+uv run src/risktrace/cli.py list --risk high
+uv run src/risktrace/cli.py show 3
 ```
 
 ## Setup
@@ -104,19 +104,19 @@ OpenAI SDK just requires one, it isn't a real secret), and
 `OLLAMA_MODEL` in `.env`, then either:
 
 ```sh
-uv run src/audit_log/smoke_test_ollama.py   # raw response shape, no logging
-uv run src/audit_log/cli.py --provider ollama
+uv run src/risktrace/smoke_test_ollama.py   # raw response shape, no logging
+uv run src/risktrace/cli.py --provider ollama
 ```
 
 ## File structure
 
 ```
-src/audit_log/
+src/risktrace/
   schema.sql              SQLite schema (interactions table)
   db.py                    init_db() — connects, applies schema.sql, returns a connection
   risk_classifier.py       the deterministic rule table + classify()
   providers.py             Anthropic / OpenAI / Ollama call layer, normalized to ProviderResponse
-  wrapper.py                log_interaction() — the middleware: call, classify, write SQLite row, append markdown
+  wrapper.py                log_interaction() — the middleware: call, classify, write SQLite row, prepend markdown
   demo_prompts.py           single source of truth for the three demo escalation prompts
   cli.py                    argparse CLI + REPL
   smoke_test.py              scaffold-only: raw Anthropic response shape
@@ -132,11 +132,11 @@ tests/
 
 One table, `interactions` — one row per logged LLM interaction, with
 indexes on `ts_start` and `risk_level` (the CLI's `list`/`show`
-commands sort and filter on both). See `src/audit_log/schema.sql` for
+commands sort and filter on both). See `src/risktrace/schema.sql` for
 the exact column list, and run:
 
 ```sh
-uv run src/audit_log/db_smoke_test.py
+uv run src/risktrace/db_smoke_test.py
 ```
 
 to see a full round-trip (insert one row exercising every column,

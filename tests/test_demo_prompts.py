@@ -1,5 +1,5 @@
-from audit_log.demo_prompts import DEMO_PROMPTS
-from audit_log.risk_classifier import classify
+from risktrace.demo_prompts import DEMO_PROMPTS
+from risktrace.risk_classifier import classify
 
 _BY_TIER = {demo.tier: demo for demo in DEMO_PROMPTS}
 

@@ -1,4 +1,4 @@
-from audit_log.cli import _classify_repl_input
+from risktrace.cli import _classify_repl_input
 
 
 def test_bare_help_is_a_command():

@@ -1,4 +1,4 @@
-from audit_log.risk_classifier import classify
+from risktrace.risk_classifier import classify
 
 
 def test_no_match_is_low():

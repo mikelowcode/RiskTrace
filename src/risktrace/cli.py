@@ -10,8 +10,8 @@ except ImportError:
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from audit_log.db import DEFAULT_DB_PATH, init_db
-from audit_log.wrapper import AUDIT_LOG_MD_PATH, log_interaction
+from risktrace.db import DEFAULT_DB_PATH, init_db
+from risktrace.wrapper import AUDIT_LOG_MD_PATH, log_interaction
 
 _PROVIDER_MENU = [
     ("1", "anthropic", "Anthropic (Claude)"),
