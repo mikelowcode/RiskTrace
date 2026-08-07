@@ -43,8 +43,8 @@ def _green(text: str) -> str:
 
 
 def _print_welcome() -> None:
-    print(_bold("AI Decision Audit Log"))
-    print(_dim("Every prompt/response is deterministically risk-classified and logged locally.\n"))
+    print(_bold("RiskTrace"))
+    print(_dim("AI Decision Audit Log — every prompt/response is deterministically risk-classified and logged locally.\n"))
 
 
 def _print_paths() -> None:
@@ -203,7 +203,7 @@ def repl(provider: str) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="audit-log")
+    parser = argparse.ArgumentParser(prog="risktrace")
     parser.add_argument("--provider", default=None)
     subparsers = parser.add_subparsers(dest="command")
 
