@@ -1,11 +1,77 @@
 import argparse
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from audit_log.db import init_db
-from audit_log.wrapper import DEFAULT_PROVIDER, log_interaction
+from audit_log.db import DEFAULT_DB_PATH, init_db
+from audit_log.wrapper import AUDIT_LOG_MD_PATH, log_interaction
+
+_PROVIDER_MENU = [
+    ("1", "anthropic", "Anthropic (Claude)"),
+    ("2", "openai", "OpenAI"),
+    ("3", "ollama", "Ollama (local)"),
+]
+
+
+def _color(code: str, text: str) -> str:
+    if not sys.stdout.isatty():
+        return text
+    return f"\033[{code}m{text}\033[0m"
+
+
+def _bold(text: str) -> str:
+    return _color("1", text)
+
+
+def _dim(text: str) -> str:
+    return _color("2", text)
+
+
+def _cyan(text: str) -> str:
+    return _color("36", text)
+
+
+def _green(text: str) -> str:
+    return _color("32", text)
+
+
+def _print_welcome() -> None:
+    print(_bold("AI Decision Audit Log"))
+    print(_dim("Every prompt/response is deterministically risk-classified and logged locally.\n"))
+
+
+def _print_paths() -> None:
+    print(f"{_cyan('sqlite')}: {DEFAULT_DB_PATH}  ({DEFAULT_DB_PATH.as_uri()})")
+    print(f"{_cyan('markdown')}: {AUDIT_LOG_MD_PATH}  ({AUDIT_LOG_MD_PATH.as_uri()})")
+
+
+def _print_help() -> None:
+    print("Commands:")
+    print("  <anything else>     send a prompt to the provider and log it")
+    print("  list [--risk TIER]  list logged interactions, newest first")
+    print("  show <id>           show every column of one interaction")
+    print("  where | paths       reprint the audit log file locations")
+    print("  help                show this message")
+    print("  exit | quit         leave (or Ctrl-D)")
+
+
+def pick_provider() -> str:
+    print("Choose a provider:")
+    for key, _, label in _PROVIDER_MENU:
+        print(f"  {key}) {label}")
+
+    by_key = {key: name for key, name, _ in _PROVIDER_MENU}
+    by_name = {name for _, name, _ in _PROVIDER_MENU}
+
+    while True:
+        choice = input("> ").strip().lower()
+        if choice in by_key:
+            return by_key[choice]
+        if choice in by_name:
+            return choice
+        print("Please enter 1, 2, or 3.")
 
 
 def _format_list_row(row) -> str:
@@ -51,8 +117,12 @@ def cmd_show(interaction_id: int) -> None:
 
 
 def repl(provider: str) -> None:
-    print(f"AI Decision Audit Log — provider: {provider}")
-    print("Type a prompt to send it, or 'exit'/'quit' to leave.\n")
+    _print_welcome()
+    _print_paths()
+    print()
+    print(f"Provider: {_green(provider)}")
+    _print_help()
+    print()
 
     while True:
         try:
@@ -69,6 +139,10 @@ def repl(provider: str) -> None:
 
         if first_word in ("exit", "quit"):
             break
+        elif first_word == "help":
+            _print_help()
+        elif first_word in ("where", "paths"):
+            _print_paths()
         elif first_word == "list":
             parts = line.split()
             risk = None
@@ -117,7 +191,14 @@ def main() -> None:
         cmd_show(args.id)
         return
 
-    provider = args.provider or DEFAULT_PROVIDER
+    env_provider = os.environ.get("AUDIT_LOG_PROVIDER")
+    if args.provider:
+        provider = args.provider
+    elif env_provider:
+        provider = env_provider
+    else:
+        provider = pick_provider()
+
     repl(provider)
 
 
