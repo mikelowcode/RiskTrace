@@ -19,6 +19,11 @@ _PROVIDER_MENU = [
     ("3", "ollama", "Ollama (local)"),
 ]
 
+_ASCII_HEADER = r""" ___ _    _   _____
+| _ (_)__| |_|_   _| _ __ _ __ ___
+|   / (_-< / / | || '_/ _` / _/ -_)
+|_|_\_/__/_\_\ |_||_| \__,_\__\___|"""
+
 
 def _color(code: str, text: str) -> str:
     if not sys.stdout.isatty():
@@ -43,7 +48,7 @@ def _green(text: str) -> str:
 
 
 def _print_welcome() -> None:
-    print(_bold("RiskTrace"))
+    print(_cyan(_bold(_ASCII_HEADER)))
     print(_dim("AI Decision Audit Log — every prompt/response is deterministically risk-classified and logged locally.\n"))
 
 
