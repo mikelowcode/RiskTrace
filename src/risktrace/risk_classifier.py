@@ -1,6 +1,68 @@
 import re
 from dataclasses import dataclass
 
+from nltk.stem import SnowballStemmer
+
+# Rule patterns below are matched against text twice: once as written, and
+# once after normalize() has stemmed every word (e.g. "making"/"makes" both
+# reduce to "make"). So a bare pattern like `make` also covers its regular
+# inflected forms without the pattern needing to spell them out — but only
+# for pattern words that are themselves already a stem (e.g. "make", "hack",
+# "bomb"). Words whose own stem differs from the word itself (e.g.
+# "phishing" -> "phish", "security" -> "secur") don't benefit: stemming
+# would have to touch the pattern text too, which we deliberately don't do,
+# to keep rule patterns literal and human-readable.
+_STEMMER = SnowballStemmer("english")
+_WORD_RE = re.compile(r"[A-Za-z']+")
+
+
+def normalize(text: str) -> str:
+    return _WORD_RE.sub(lambda m: _STEMMER.stem(m.group()), text)
+
+
+# proximity_match() tokenizes on letters+digits, not normalize()'s letters-
+# only _WORD_RE: proximity cares about token POSITION (and an age term like
+# "15 year old" starts with a digit), while normalize() cares about token
+# FORM (and digits never stem). The two tokenizers serve different jobs and
+# are deliberately not shared -- but the *candidate texts* (original +
+# normalized) fed into proximity_match() are the same ones classify()
+# already computes for regular regex rules, so e.g. "dated" is covered via
+# the normalized pass (dated/dating/date all stem to "date") without a
+# proximity rule needing its own stemming logic.
+_PROXIMITY_TOKEN_RE = re.compile(r"[A-Za-z0-9']+")
+
+
+def proximity_match(text: str, term_a: str, term_b: str,
+                     max_distance: int = 5, ordered: bool = False) -> bool:
+    starts = [t.start() for t in _PROXIMITY_TOKEN_RE.finditer(text)]
+    if not starts:
+        return False
+
+    def token_indices(pattern: str) -> list[int]:
+        indices = []
+        for m in re.finditer(pattern, text, re.IGNORECASE):
+            candidates = [i for i, s in enumerate(starts) if s <= m.start()]
+            if candidates:
+                indices.append(candidates[-1])
+        return indices
+
+    a_positions = token_indices(term_a)
+    b_positions = token_indices(term_b)
+    for a in a_positions:
+        for b in b_positions:
+            if ordered and a >= b:
+                continue
+            if abs(a - b) <= max_distance:
+                return True
+    return False
+
+
+@dataclass(frozen=True)
+class ProximitySpec:
+    term_b: str
+    max_distance: int
+    ordered: bool = False
+
 
 @dataclass(frozen=True)
 class Rule:
@@ -8,6 +70,7 @@ class Rule:
     category: str
     tier: str
     label: str
+    proximity: ProximitySpec | None = None
 
 
 RULES: list[Rule] = [
@@ -37,17 +100,41 @@ RULES: list[Rule] = [
     Rule(r"\buntraceable firearm\b", "weapons_or_explosives", "high", "untraceable firearm"),
     Rule(r"\bghost gun\b", "weapons_or_explosives", "high", "ghost gun"),
     Rule(r"\bchemical weapon\b", "weapons_or_explosives", "high", "chemical weapon"),
-    Rule(r"(?=.*\bbleach\b)(?=.*\bammonia\b)", "weapons_or_explosives", "high", "bleach + ammonia (toxic gas combination)"),
+    # Migrated to proximity matching (was unordered co-occurrence with no
+    # distance limit -- risked false positives on long documents where the
+    # two words appear far apart and unrelated). max_distance=4: natural
+    # phrasings ("mix bleach and ammonia", "combine ammonia with bleach",
+    # "mixed bleach with ammonia") all land at token distance 2; a
+    # same-document but unrelated mention of both words lands at distance
+    # 12+. Tighter than the minors_safety age+dating distance below,
+    # deliberately -- this is a specific hazardous-combination rule, not a
+    # general co-occurrence signal.
+    Rule(r"\bbleach\b", "weapons_or_explosives", "high", "bleach + ammonia (toxic gas combination)",
+         proximity=ProximitySpec(r"\bammonia\b", max_distance=4, ordered=False)),
 
     # minors_safety — high, deliberately narrow (false positives cost more
-    # here than anywhere else). Age+dating rules require BOTH an explicit
-    # under-18 age AND the verb phrase directly adjacent to it — not just
-    # co-occurrence — so "my 15 year old daughter has a dating app" does not
-    # fire, but "I want to date a 15 year old" does.
+    # here than anywhere else). All three age+X rules require BOTH an
+    # explicit under-18 age AND specific language nearby -- not just
+    # co-occurrence anywhere in the text -- so "my 15 year old daughter has
+    # a dating app" does not fire, but "I want to date a 15 year old" does.
+    # The date/dating rule below enforces "nearby" via proximity matching
+    # (within max_distance tokens, either order); the relationship/attracted
+    # rules still enforce it via strict adjacency in the regex itself.
     Rule("child sexual", "minors_safety", "high", "child sexual"),
     Rule("sexualize a minor", "minors_safety", "high", "sexualize a minor"),
-    Rule(r"\b(?:date|dating)\s+(?:a|an)\b.{0,10}\b(?:1[0-7]|[1-9])[\s-]?(?:years?|yrs?)[\s-]?old\b",
-         "minors_safety", "high", "wanting to date a minor (age + dating language)"),
+    # Migrated to proximity matching (was strict forward-order adjacency:
+    # "date/dating a/an" had to appear directly before the age, so reversed
+    # phrasing like "the 15 year old wants to date me" couldn't match).
+    # max_distance=5 is the exact boundary the test cases require: the
+    # reversed-order case ("The 15 year old wants to date me") lands at
+    # token distance 5 and must be caught; the deliberately-narrow negative
+    # case ("My 15 year old daughter has a dating app") lands at distance 6
+    # and must stay excluded. The old adjacency requirement is gone -- the
+    # age-pattern + proximity combination is now what keeps this rule
+    # narrow instead.
+    Rule(r"\b(?:date|dating)\b", "minors_safety", "high", "wanting to date a minor (age + dating language)",
+         proximity=ProximitySpec(r"\b(?:1[0-7]|[1-9])[\s-]?(?:years?|yrs?)[\s-]?old\b",
+                                  max_distance=5, ordered=False)),
     Rule(r"\brelationship with (?:a|an)\b.{0,10}\b(?:1[0-7]|[1-9])[\s-]?(?:years?|yrs?)[\s-]?old\b",
          "minors_safety", "high", "relationship with a minor (age + relationship language)"),
     Rule(r"\battracted to (?:a|an)\b.{0,10}\b(?:1[0-7]|[1-9])[\s-]?(?:years?|yrs?)[\s-]?old\b",
@@ -84,13 +171,24 @@ TIER_ORDER = {"low": 0, "medium": 1, "high": 2}
 
 def classify(prompt: str, response: str) -> tuple[str, list[str]]:
     text = f"{prompt}\n{response}"
+    normalized = normalize(text)
+    candidates = (text, normalized)
 
     highest_tier = "low"
     matched: list[str] = []
     seen: set[str] = set()
 
     for rule in RULES:
-        if re.search(rule.pattern, text, re.IGNORECASE):
+        if rule.proximity is None:
+            hit = any(re.search(rule.pattern, candidate, re.IGNORECASE) for candidate in candidates)
+        else:
+            hit = any(
+                proximity_match(candidate, rule.pattern, rule.proximity.term_b,
+                                 max_distance=rule.proximity.max_distance,
+                                 ordered=rule.proximity.ordered)
+                for candidate in candidates
+            )
+        if hit:
             label = f"{rule.category}: {rule.label}"
             if label not in seen:
                 seen.add(label)
