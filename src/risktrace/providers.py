@@ -115,6 +115,27 @@ PROVIDERS = {
 }
 
 
+def resolve_model(provider: str) -> str:
+    """What model a provider would use, without making a call. Mirrors the
+    env-var + default logic embedded in each _call_* function -- kept here
+    as the single source of truth so callers that need the model up front
+    (e.g. coverage_probe's cache keys) don't duplicate that logic."""
+    if provider in ("anthropic", "claude"):
+        return os.environ.get("ANTHROPIC_MODEL", "claude-opus-5")
+    if provider == "openai":
+        return os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+    if provider == "ollama":
+        model = os.environ.get("OLLAMA_MODEL")
+        if not model:
+            raise RuntimeError(
+                "OLLAMA_MODEL is not set. Copy .env.example to .env and fill it in."
+            )
+        return model
+    raise ValueError(
+        f"Unknown provider {provider!r}. Choose from: {', '.join(sorted(set(PROVIDERS)))}"
+    )
+
+
 def call_provider(provider: str, prompt: str) -> ProviderResponse:
     try:
         fn = PROVIDERS[provider]

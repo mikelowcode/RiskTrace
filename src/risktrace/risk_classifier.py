@@ -78,7 +78,17 @@ RULES: list[Rule] = [
     Rule("my social security number", "personal_data", "high", "my social security number"),
     Rule(r"\b\d{3}-\d{2}-\d{4}\b", "personal_data", "high", "SSN pattern"),
     Rule(r"\b\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{4}\b", "personal_data", "high", "credit card number pattern"),
-    Rule("my password is", "personal_data", "high", "my password is"),
+    # Broadened from the literal phrase "my password is" (2026-08-11, after
+    # a live coverage-probe run surfaced "the password is X"/"password: X"
+    # as real misses). Deliberately anchored to an is/colon separator right
+    # after "password" -- NOT a bare "password ... value" match -- so
+    # "password policy"/"password reset"/"password requirements" stay
+    # excluded, and \bis\b's own word boundary keeps "isn't" from matching
+    # ("the password isn't set yet" has no boundary between "is" and "n").
+    # Residual gap ("I use the password hunter2" -- no is/colon separator
+    # at all) is intentionally NOT covered; see KNOWN_GAPS.
+    Rule(r"\bpassword\b\s*(?:is\b|:)", "personal_data", "high",
+         "password disclosure (password is ... / password: ...)"),
     Rule(r"\b(?:log[- ]?in|login) key\b", "personal_data", "high", "log-in key"),
     Rule(r"\bapi key\b", "personal_data", "high", "api key"),
 
@@ -149,14 +159,32 @@ RULES: list[Rule] = [
 
     # deception — medium
     Rule(r"\bpretend (?:to be|you are|you're)\b", "deception", "medium", "pretend to be / pretend you are"),
-    Rule("impersonate", "deception", "medium", "impersonate"),
+    # Extended from the literal "impersonate" (2026-08-11) to also cover
+    # its own inflected forms directly, NOT via normalization: "impersonate"
+    # isn't stem-idempotent (stems to "imperson"), so 1.2a's stemming pass
+    # can't close this the way it does for make/hack/bypass -- predicted in
+    # the 1.2a report, confirmed by a live coverage-probe run. Synonym
+    # forms ("pose as", "fake being", "mimic", "act like") are a separate,
+    # genuine gap -- see KNOWN_GAPS, not folded into this pattern.
+    Rule(r"\bimperson(?:ate[sd]?|ating)\b", "deception", "medium", "impersonate"),
 
-    # unauthorized_access — high; proximity patterns catch "hack into X"
-    # phrasing without flagging unrelated uses of "hack" ("life hack",
-    # "hackathon") — hack alone isn't enough, it must be paired with a
-    # target (into/account/email/password/etc.).
-    Rule(r"\bhack(?:ing)?\b.{0,25}\b(?:into|account|email|password|wifi|phone|computer|server|system|network)\b",
-         "unauthorized_access", "high", "hack ... into an account/system"),
+    # unauthorized_access — high; hack alone isn't enough, it must be
+    # paired with a target (into/account/email/password/etc.), so unrelated
+    # uses of "hack" ("life hack", "hackathon") don't false-positive.
+    # Migrated to proximity matching (2026-08-11): was hack.{0,25}target,
+    # order-sensitive (target had to follow "hack"), so "was hacked by me"
+    # (target word BEFORE the verb) didn't match -- same failure shape as
+    # the 1.2b dating-rule migration, found live by the coverage probe.
+    # max_distance=5 is comparable to the old ~25-character/~5-token
+    # window. The hack-verb side is untouched -- "hacked" is still only
+    # covered via the existing normalized-pass stemming (hacked -> hack),
+    # not by this pattern directly. Pure-synonym phrasing ("broke into",
+    # "accessed without permission") is a separate, genuine gap -- see
+    # KNOWN_GAPS, not reachable via proximity or stemming.
+    Rule(r"\bhack(?:ing)?\b", "unauthorized_access", "high", "hack ... into an account/system",
+         proximity=ProximitySpec(
+             r"\b(?:into|account|email|password|wifi|phone|computer|server|system|network)\b",
+             max_distance=5, ordered=False)),
     Rule(r"\bbrute[\s-]?force\b.{0,20}\bpassword\b", "unauthorized_access", "high", "brute-force a password"),
     Rule(r"\bcrack\b.{0,20}\bpassword\b", "unauthorized_access", "high", "crack a password"),
     Rule(r"\bkeylogger\b", "unauthorized_access", "high", "keylogger"),

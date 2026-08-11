@@ -13,3 +13,6 @@ venv/
 *.sqlite3
 *.db
 audit-log.md
+
+# cached live-API paraphrases from the coverage probe (src/risktrace/coverage_probe.py)
+coverage_probe_cache.json
