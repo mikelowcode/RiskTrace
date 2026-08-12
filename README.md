@@ -133,6 +133,10 @@ isolated environment — no repo checkout needed. `risktrace list`,
 `risktrace show <id>`, and `risktrace --provider <name>` all work the same
 as the `uv run` forms below.
 
+The audit database and markdown mirror live in `~/.local/share/risktrace/`,
+separate from pipx's own venv — `pipx uninstall risktrace` (or reinstalling
+to upgrade) removes the command but leaves your audit history untouched.
+
 ### Clone and run with uv (for development)
 
 ```sh
