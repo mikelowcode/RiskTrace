@@ -120,6 +120,21 @@ uv run src/risktrace/cli.py show 3
 
 ## Setup
 
+### Install with pipx (for using RiskTrace)
+
+```sh
+pipx install git+https://github.com/mikelowcode/RiskTrace
+cp .env.example .env   # or set env vars directly — see below
+risktrace
+```
+
+This installs a global `risktrace` command and its dependencies in an
+isolated environment — no repo checkout needed. `risktrace list`,
+`risktrace show <id>`, and `risktrace --provider <name>` all work the same
+as the `uv run` forms below.
+
+### Clone and run with uv (for development)
+
 ```sh
 uv sync
 cp .env.example .env

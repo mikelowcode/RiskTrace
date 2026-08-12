@@ -1,8 +1,10 @@
 [project]
 name = "risktrace"
 version = "0.2.0"
+description = "AI Decision Audit Log — a local-first audit log middleware for LLM API calls."
 requires-python = ">=3.10"
 license = "MIT"
+authors = [{ name = "mikelowcode" }]
 dependencies = [
     "anthropic>=0.68.0",
     "nltk>=3.10.2",
@@ -10,13 +12,17 @@ dependencies = [
     "python-dotenv>=1.0.1",
 ]
 
+[project.scripts]
+risktrace = "risktrace.cli:main"
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
 ]
 
-[tool.uv]
-package = false
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
