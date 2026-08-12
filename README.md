@@ -1,15 +1,17 @@
 # RiskTrace
 
-**AI Decision Audit Log** — a local-first audit log middleware for LLM API calls. Every prompt and
-response that passes through it is run against a deterministic,
-non-LLM, regex-based risk classifier, then written to a local SQLite
-database and a human-readable markdown mirror.
+**AI Decision Audit Log** — a local-first audit log middleware for LLM API calls.
 
-Built for the Claude Impact Lab build session "Who decides the rules?"
-(AI governance and transparency). The core story is a governance
-mechanism that's fully inspectable — a human can read the classifier's
-rule table (`src/risktrace/risk_classifier.py`) top to bottom and know
-exactly why any interaction was flagged the way it was. No black box.
+Every prompt and response that passes through RiskTrace is run against a
+deterministic, non-LLM, regex-based risk classifier, then written to a local
+SQLite database and a human-readable markdown mirror. The classifier's full
+rule table lives in `src/risktrace/risk_classifier.py` — a human can read it
+top to bottom and know exactly why any interaction was flagged the way it
+was. No black box, no external moderation API in the audit path.
+
+RiskTrace started as a project for Anthropic's Claude Impact Lab ("Who
+decides the rules?", on AI governance and transparency) and has continued
+past that as an actively developed tool.
 
 ## "Local-first" describes the audit record, not the model
 
@@ -40,14 +42,42 @@ are 100% deterministic Python.
 
 ## Status
 
-All phases (0–7) are implemented:
-- SQLite schema + deterministic risk classifier
-- Provider-agnostic call layer (Claude via `anthropic`, OpenAI/Ollama via `openai`)
-- Audit-logging middleware + markdown mirror
-- CLI REPL with a guided first-run experience (provider picker, welcome banner, `list`/`show`/`where`/`help`)
-- Whole-shape command dispatch (free-form prompts starting with a reserved word aren't misrouted)
-- Expanded rule coverage for weapons/explosives, personal data, minors safety, illegal activity, and deception — with known coverage gaps pinned down as tests, not silently assumed
-- Arrow-key line editing in the REPL
+The core pipeline — classify, log to SQLite, mirror to markdown, CLI
+query/REPL — is built and in daily use. Ongoing work happens in rounds, each
+documented with its own design rationale rather than folded in silently:
+
+- Rule-matching engine: stemming/normalization, proximity matching, and a
+  structured `KNOWN_GAPS` registry (see `COVERAGE.md`) on top of the base
+  regex rule table.
+- An opt-in, live-API coverage probe for automated gap discovery — see
+  `PROBE.md`. **This makes real, billed API calls when run with `--live`;
+  it never runs by default and never affects the audit record itself**
+  (see the "No LLM in the audit path" note above).
+- Middleware/proxy layer for capturing traffic from arbitrary AI chat
+  clients: scoped, not yet built.
+
+Known limitations of the classifier itself are tracked explicitly, not
+silently absorbed — see `COVERAGE.md` for the live, generated table of what
+this rule table is known not to catch and why.
+
+## Coverage and validation
+
+RiskTrace tracks its own classifier's known blind spots as a first-class,
+tested artifact rather than an implicit assumption of completeness:
+
+- **`COVERAGE.md`** — the live `KNOWN_GAPS` table: every phrasing or pattern
+  currently known to slip past the classifier, why, and a regression test
+  proving the gap is real (not just unaddressed and untracked).
+- **`PROBE.md`** — documents the coverage probe, an opt-in tool that uses an
+  LLM as a paraphrase generator (never a judge) to find new gaps
+  automatically. Read this before running `coverage_probe.py --live` — it
+  covers cost, the categories it deliberately never generates for
+  (`minors_safety`, `self_harm_or_violence` — those stay manually curated),
+  and how findings get triaged into either a rule fix or a new
+  `KNOWN_GAPS` entry.
+
+Every known limitation is either fixed or documented and tested — never
+silently unaddressed.
 
 ## Demo escalation prompts
 
@@ -96,6 +126,14 @@ cp .env.example .env
 # edit .env: at minimum set ANTHROPIC_API_KEY, or configure Ollama for
 # credit-free local testing (see below)
 ```
+
+> **Cost note:** RiskTrace's core classify → log pipeline never calls an LLM
+> and costs nothing to run. The one exception is `coverage_probe.py --live`
+> (see `PROBE.md`), an entirely separate, manually-invoked validation tool
+> that makes real, billed calls to whichever provider you point it at. It
+> requires both an API key **and** an explicit `--live` flag — having a key
+> configured for RiskTrace's normal use will never by itself trigger probe
+> spend.
 
 ### Credit-free local testing with Ollama
 
